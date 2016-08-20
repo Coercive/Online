@@ -29,5 +29,4 @@ if($oIsOnline) {
 	echo "url : " .$oIsOnline->url() . "<br />";
 }
 
-/**
 ```
