@@ -141,6 +141,25 @@ class Online {
 	}
 
 	/**
+	 * IS OK
+	 *
+	 * @return bool
+	 */
+	public function isOk() {
+		if(empty($this->_aCurlInfo['http_code'])) { return false; }
+		return $this->_aCurlInfo['http_code'] >= 200 && $this->_aCurlInfo['http_code'] < 300;
+	}
+
+	/**
+	 * HTTP_CODE
+	 *
+	 * @return int
+	 */
+	public function http_code() {
+		return empty($this->_aCurlInfo['http_code']) ? 0 : $this->_aCurlInfo['http_code'];
+	}
+
+	/**
 	 * REDIRECT STATUS
 	 *
 	 * @return bool
