@@ -18,7 +18,7 @@ use Exception;
 class Online {
 
 	# PROPERTIES
-	const TIME_OUT = 5;
+	const TIME_OUT = 15;
 
 	/** @var array : MULTITON Try List */
 	static private $_aTryList = [];
@@ -87,8 +87,17 @@ class Online {
 	/** @var string : Provided Url */
 	private $_sProvidedUrl = '';
 
+	/** @var string : cURL Exec Result */
+	private $_sCurlContent = '';
+
 	/** @var bool : cURL Exec Status */
 	private $_bCurlStatus = false;
+
+	/** @var int : cURL Error Number */
+	private $_iCurlErrNo = 0;
+
+	/** @var string : cURL Error Message */
+	private $_sCurlError = '';
 
 	/** @var array : cURL Info */
 	private $_aCurlInfo = [];
@@ -116,13 +125,28 @@ class Online {
 		$rCUrlSession = curl_init();
 
 		# OPTIONS
+		curl_setopt($rCUrlSession, CURLOPT_CUSTOMREQUEST, 'GET');
+		curl_setopt($rCUrlSession, CURLOPT_POST, false);
+		curl_setopt($rCUrlSession, CURLOPT_USERAGENT, 'PHP CURL AGENT');
+		curl_setopt($rCUrlSession, CURLOPT_HEADER, true);
 		curl_setopt($rCUrlSession, CURLOPT_URL, $this->_sProvidedUrl);
 		curl_setopt($rCUrlSession, CURLOPT_TIMEOUT, self::TIME_OUT);
 		curl_setopt($rCUrlSession, CURLOPT_CONNECTTIMEOUT, self::TIME_OUT);
 		curl_setopt($rCUrlSession, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($rCUrlSession, CURLOPT_CONNECTTIMEOUT, 30);
+		curl_setopt($rCUrlSession, CURLOPT_FOLLOWLOCATION, false);
+		curl_setopt($rCUrlSession, CURLOPT_ENCODING, '');
+		curl_setopt($rCUrlSession, CURLOPT_FRESH_CONNECT, true);
+
+		# ERROR
+		$this->_iCurlErrNo = curl_errno($rCUrlSession);
+		$this->_sCurlError = curl_error($rCUrlSession);
+
+		# CONTENT
+		$this->_sCurlContent = curl_exec($rCUrlSession);
 
 		# STATUS
-		$this->_bCurlStatus = (bool) curl_exec($rCUrlSession);
+		$this->_bCurlStatus = (bool) $this->_sCurlContent;
 
 		# SET RESULT INFO
 		$this->_aCurlInfo = curl_getinfo($rCUrlSession);
@@ -195,4 +219,32 @@ class Online {
 	public function time() {
 		return isset($this->_aCurlInfo['total_time']) ? floatval($this->_aCurlInfo['total_time']) : 0;
 	}
+
+	/**
+	 * ERR NUMBER
+	 *
+	 * @return int
+	 */
+	public function getErrNo() {
+		return $this->_iCurlErrNo;
+	}
+
+	/**
+	 * ERROR MESSAGE
+	 *
+	 * @return string
+	 */
+	public function getErrorMessage() {
+		return $this->_sCurlError;
+	}
+
+	/**
+	 * GET CONTENT
+	 *
+	 * @return string
+	 */
+	public function getContent() {
+		return $this->_sCurlContent;
+	}
+
 }
