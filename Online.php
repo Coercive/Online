@@ -129,7 +129,6 @@ class Online {
 		curl_setopt($rCUrlSession, CURLOPT_TIMEOUT, self::$_iTimeoutInSecond);
 		curl_setopt($rCUrlSession, CURLOPT_CONNECTTIMEOUT, self::$_iTimeoutInSecond);
 		curl_setopt($rCUrlSession, CURLOPT_RETURNTRANSFER, true);
-		curl_setopt($rCUrlSession, CURLOPT_CONNECTTIMEOUT, 30);
 		curl_setopt($rCUrlSession, CURLOPT_FOLLOWLOCATION, false);
 		curl_setopt($rCUrlSession, CURLOPT_ENCODING, '');
 		curl_setopt($rCUrlSession, CURLOPT_FRESH_CONNECT, true);
