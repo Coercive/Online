@@ -5,18 +5,16 @@ use Exception;
 
 /**
  * Online
- * PHP Version 	7
  *
- * @version		1
  * @package 	Coercive\Utility\Online
- * @link		@link https://github.com/Coercive/Online
+ * @link		https://github.com/Coercive/Online
  *
  * @author  	Anthony Moral <contact@coercive.fr>
- * @copyright   (c) 2017 - 2018 Anthony Moral
- * @license 	http://www.gnu.org/copyleft/lesser.html GNU Lesser General Public License
+ * @copyright   (c) 2024 Anthony Moral
+ * @license 	MIT
  */
-class Online {
-
+class Online
+{
 	# PROPERTIES
 	const TIME_OUT = 15;
 	const CURL_BUSY_WAIT = 5;
