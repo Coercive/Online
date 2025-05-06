@@ -10,7 +10,7 @@ use Exception;
  * @link		https://github.com/Coercive/Online
  *
  * @author  	Anthony Moral <contact@coercive.fr>
- * @copyright   (c) 2024 Anthony Moral
+ * @copyright   (c) 2025 Anthony Moral
  * @license 	MIT
  */
 class Online
@@ -18,48 +18,54 @@ class Online
 	# PROPERTIES
 	const TIME_OUT = 15;
 	const CURL_BUSY_WAIT = 5;
+	const CURL_USERAGENT = 'Coercive Online Php cUrl';
 	const ERROR_TYPE_CURL_MULTI_ADD_HANDLE = 'ERROR_TYPE_CURL_MULTI_ADD_HANDLE';
 	const ERROR_TYPE_CURL_MULTI_EXEC = 'ERROR_TYPE_CURL_MULTI_EXEC';
 	const ERROR_TYPE_NO_CURL_RESSOURCE_PROVIDED = 'ERROR_TYPE_NO_CURL_RESSOURCE_PROVIDED';
 	const ERROR_TYPE_NO_URL_IN_CURL_RESULT = 'ERROR_TYPE_NO_URL_IN_CURL_RESULT';
 
+	/** @var string : Declared UserAgent for cUrl */
+	static private string $useragent = self::CURL_USERAGENT;
+
 	/** @var int : Max time out befor close cUrl */
-	static private $_iTimeoutInSecond = self::TIME_OUT;
+	static private int $timeout = self::TIME_OUT;
 
 	/** @var array : Try List of url */
-	static private $_aTryList = [];
+	static private array $tryList = [];
 
 	/** @var array : List of each instances of cUrl init */
-	static private $_aMultiCUrlStorage = [];
+	static private array $multiCUrlStorage = [];
 
 	/** @var array : MULTITON Processed List */
-	static private $_aProcessedList = [];
+	static private array $processedList = [];
 
 	/** @var array : List of errors occured */
-	static private $_aErrors = [];
+	static private array $errors = [];
 
 	/**
 	 * EXCEPTION
 	 *
-	 * @param string $sMessage [optional]
-	 * @param string $sMethod [optional]
-	 * @param int $iLine [optional]
+	 * @param string $msg [optional]
+	 * @param string $method [optional]
+	 * @param int $line [optional]
 	 * @throws Exception
 	 */
-	static private function _Exception($sMessage = 'Unknow', $sMethod = __METHOD__, $iLine = __LINE__) {
-		throw new Exception("Online ERROR, message : $sMessage, in method : $sMethod, at line : $iLine.");
+	static private function exception($msg = 'Unknow', $method = __METHOD__, $line = __LINE__)
+	{
+		throw new Exception("Online ERROR, message : $msg, in method : $method, at line : $line.");
 	}
 
 	/**
 	 * SET ERROR
 	 *
-	 * @param string $sUrl
-	 * @param string $sType
-	 * @param mixed $mState
+	 * @param string $url
+	 * @param string $type
+	 * @param mixed $msg
 	 * @return void
 	 */
-	static private function _setError($sUrl, $sType, $mState) {
-		self::$_aErrors[$sUrl][$sType] = $mState;
+	static private function _setError(string $url, string $type, string $msg)
+	{
+		self::$errors[$url][$type] = $msg;
 	}
 
 	/**
@@ -67,19 +73,18 @@ class Online
 	 *
 	 * @param string $sUrl
 	 * @return string
+	 * @throws Exception
 	 */
-	static private function _formatUrl($sUrl) {
-
-		# SKIP ERROR
-		if(!is_string($sUrl)) { self::_Exception('The provided URL param is not in a string format.'); }
-
+	static private function cleanUrl(string $sUrl): string
+	{
 		# TRIM ERROR
 		$sUrl = trim($sUrl, " \t\n\r\0\x0B/");
-		if(!$sUrl) { self::_Exception('The provided URL param has not a valid content.'); }
+		if(!$sUrl) {
+			self::exception('The provided URL param has not a valid content.');
+		}
 
 		# VALID STRING
 		return $sUrl;
-
 	}
 
 	/**
@@ -91,96 +96,99 @@ class Online
 	 * @param int $iStillRunning
 	 * @return int
 	 */
-	static private function _cUrlMultiExec($rMultiCUrl, &$iStillRunning) {
-
+	static private function _cUrlMultiExec($rMultiCUrl, int &$iStillRunning): int
+	{
 		do {
-			$iMultiCUrlState = curl_multi_exec($rMultiCUrl, $iStillRunning);
-			if($iMultiCUrlState > 0) {
-				$sMessage = $iMultiCUrlState . ' - ' . curl_multi_strerror($iMultiCUrlState);
-				self::_setError($iStillRunning, self::ERROR_TYPE_CURL_MULTI_EXEC, $sMessage);
+			$status = curl_multi_exec($rMultiCUrl, $iStillRunning);
+			if($status > 0) {
+				$message = $status . ' - ' . curl_multi_strerror($status);
+				self::_setError($iStillRunning, self::ERROR_TYPE_CURL_MULTI_EXEC, $message);
 			}
 		}
-		while($iMultiCUrlState === CURLM_CALL_MULTI_PERFORM || $iStillRunning > 0 );
+		while($status === CURLM_CALL_MULTI_PERFORM || $iStillRunning > 0 );
 
-		return $iMultiCUrlState;
-
+		return $status;
 	}
 
 	/**
 	 * CUSTOM CURL ADD HANDLE
 	 *
 	 * @param resource $rMultiCUrl
-	 * @param string $sUrl
+	 * @param string $url
 	 * @return int
 	 */
-	static private function _cUrlAddHandle($rMultiCUrl, string $sUrl) {
-
+	static private function _cUrlAddHandle($rMultiCUrl, string $url): int
+	{
 		/** @var resource Init CUrl Session */
-		$rCUrlSession = curl_init();
+		$r = curl_init();
 
 		# OPTIONS
-		curl_setopt($rCUrlSession, CURLOPT_CUSTOMREQUEST, 'GET');
-		curl_setopt($rCUrlSession, CURLOPT_POST, false);
-		curl_setopt($rCUrlSession, CURLOPT_USERAGENT, 'PHP CURL AGENT');
-		curl_setopt($rCUrlSession, CURLOPT_HEADER, true);
-		curl_setopt($rCUrlSession, CURLOPT_URL, $sUrl);
-		curl_setopt($rCUrlSession, CURLOPT_TIMEOUT, self::$_iTimeoutInSecond);
-		curl_setopt($rCUrlSession, CURLOPT_CONNECTTIMEOUT, self::$_iTimeoutInSecond);
-		curl_setopt($rCUrlSession, CURLOPT_RETURNTRANSFER, true);
-		curl_setopt($rCUrlSession, CURLOPT_FOLLOWLOCATION, false);
-		curl_setopt($rCUrlSession, CURLOPT_ENCODING, '');
-		curl_setopt($rCUrlSession, CURLOPT_FRESH_CONNECT, true);
+		curl_setopt($r, CURLOPT_CUSTOMREQUEST, 'GET');
+		curl_setopt($r, CURLOPT_POST, false);
+		curl_setopt($r, CURLOPT_USERAGENT, self::$useragent);
+		curl_setopt($r, CURLOPT_HEADER, true);
+		curl_setopt($r, CURLOPT_URL, $url);
+		curl_setopt($r, CURLOPT_TIMEOUT, self::$timeout);
+		curl_setopt($r, CURLOPT_CONNECTTIMEOUT, self::$timeout);
+		curl_setopt($r, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($r, CURLOPT_FOLLOWLOCATION, false);
+		curl_setopt($r, CURLOPT_ENCODING, '');
+		curl_setopt($r, CURLOPT_FRESH_CONNECT, true);
 
 		# Add to thread
-		$iErrorNo = curl_multi_add_handle($rMultiCUrl, $rCUrlSession);
+		$error = curl_multi_add_handle($rMultiCUrl, $r);
 
 		# Set Ressource
-		self::$_aMultiCUrlStorage[$sUrl] = $rCUrlSession;
+		self::$multiCUrlStorage[$url] = $r;
 
 		# Return error (0 if not)
-		return $iErrorNo;
-
+		return $error;
 	}
 
 	/**
 	 * SET CUSTOM TIMEOUT
 	 *
-	 * @param int $iSeconds
+	 * @param int $seconds
 	 */
-	static public function setTimeout($iSeconds) {
-		self::$_iTimeoutInSecond = (int) $iSeconds;
+	static public function setTimeout(int $seconds)
+	{
+		self::$timeout = $seconds;
+	}
+
+	/**
+	 * SET CUSTOM USER AGENT
+	 *
+	 * @param string $name
+	 */
+	static public function setUserAgent(string $name)
+	{
+		self::$useragent = $name;
 	}
 
 	/**
 	 * GET STATE
 	 *
-	 * @param string $sUrl
+	 * @param string $url
 	 * @return Online
+	 * @throws Exception
 	 */
-	static public function get($sUrl) {
-
-		# PREPARE URL
-		$sUrl = self::_formatUrl($sUrl);
-
-		# GET
-		return self::$_aProcessedList[$sUrl] ?? null;
-
+	static public function get(string $url): ? Online
+	{
+		$url = self::cleanUrl($url);
+		return self::$processedList[$url] ?? null;
 	}
 
 	/**
 	 * CREATE ITEM TO CURL
 	 *
-	 * @param string $sUrl
+	 * @param string $url
 	 * @return string
+	 * @throws Exception
 	 */
-	static public function create($sUrl) {
-
-		# PREPARE URL
-		$sUrl = self::_formatUrl($sUrl);
-
-		# RETURN PREPARED URL
-		return self::$_aTryList[$sUrl] = $sUrl;
-
+	static public function create(string $url): string
+	{
+		$url = self::cleanUrl($url);
+		return self::$tryList[$url] = $url;
 	}
 
 	/**
@@ -188,50 +196,55 @@ class Online
 	 *
 	 * @return array
 	 */
-	static public function getErrors() {
-		return self::$_aErrors;
+	static public function getErrors(): array
+	{
+		return self::$errors;
 	}
 
 	/**
 	 * URL ANALYSIS
 	 *
 	 * @return void
+	 * @throws Exception
 	 */
-	static public function run() {
-
+	static public function run()
+	{
 		# Skip if no url provide
-		if(!self::$_aTryList) { return; }
+		if(!self::$tryList) {
+			return;
+		}
 
 		# Init multi cUrl
-		$rMultiCUrl = curl_multi_init();
+		$r = curl_multi_init();
 
 		# Process nodes
-		foreach (self::$_aTryList as $sUrl) {
-
-			$iHandlerErrorNo = self::_cUrlAddHandle($rMultiCUrl, $sUrl);
-			if($iHandlerErrorNo) {
-				self::_setError($sUrl, self::ERROR_TYPE_CURL_MULTI_ADD_HANDLE, $iHandlerErrorNo);
+		foreach (self::$tryList as $url) {
+			$error = self::_cUrlAddHandle($r, $url);
+			if($error) {
+				self::_setError($url, self::ERROR_TYPE_CURL_MULTI_ADD_HANDLE, strval($error));
 			}
-
 		}
 
 		# Process all
-		$iMultiCUrlState = self::_cUrlMultiExec($rMultiCUrl, $iStillRunning);
+		$iStillRunning = 0;
+		$iMultiCUrlState = self::_cUrlMultiExec($r, $iStillRunning);
 
 		# Wait for completion
 		do {
 
 			# Non-busy (!) wait for state change : https://bugs.php.net/bug.php?id=61141:
-			if (curl_multi_select($rMultiCUrl) === -1) { sleep(self::CURL_BUSY_WAIT); }
+			if (curl_multi_select($r) === -1) {
+				sleep(self::CURL_BUSY_WAIT);
+			}
 
 			# Get new state
-			self::_cUrlMultiExec($rMultiCUrl, $iStillRunning);
+			self::_cUrlMultiExec($r, $iStillRunning);
 
 			# Get datas
-			while ($aInfo = curl_multi_info_read($rMultiCUrl)) {
+			while ($infos = curl_multi_info_read($r)) {
 
 				/** @var resource $rCUrlSession */
-				$rCUrlSession = $aInfo['handle'] ?? null;
+				$rCUrlSession = $infos['handle'] ?? null;
 				if(!$rCUrlSession) {
 					self::_setError(
 						uniqid('unknown_', true),
@@ -242,9 +255,9 @@ class Online
 				}
 
 				# Load in Online instance
-				$oOnline = new self($rCUrlSession);
-				$sUrl = $oOnline->url();
-				if(!$sUrl) {
+				$online = new self($rCUrlSession);
+				$url = $online->url();
+				if(!$url) {
 					self::_setError(
 						uniqid('unknown_', true),
 						self::ERROR_TYPE_NO_URL_IN_CURL_RESULT,
@@ -254,17 +267,16 @@ class Online
 				}
 
 				# Add to processed list
-				self::$_aProcessedList[$sUrl] = $oOnline;
+				self::$processedList[$url] = $online;
 
 				# Close handler
-				curl_multi_remove_handle($rMultiCUrl, $rCUrlSession);
+				curl_multi_remove_handle($r, $rCUrlSession);
 
 			}
 		} while ($iMultiCUrlState === CURLM_OK && $iStillRunning);
 
 		# Close multi handler
-		curl_multi_close($rMultiCUrl);
-
+		curl_multi_close($r);
 	}
 
 ########################################################################################################################
@@ -272,36 +284,37 @@ class Online
 ########################################################################################################################
 
 	/** @var string : Provided Url */
-	private $_sProvidedUrl = '';
+	private string $_sProvidedUrl = '';
 
 	/** @var string : cURL Exec Result */
-	private $_sCurlContent = '';
+	private string $_sCurlContent = '';
 
 	/** @var string : cURL Exec Message */
-	private $_sCurlMessage = false;
+	private string $_sCurlMessage = '';
 
 	/** @var bool : cURL Exec Status */
-	private $_bCurlStatus = false;
+	private bool $_bCurlStatus = false;
 
 	/** @var int : cURL Exec Result */
-	private $_iCurlResult = 0;
+	private int $_iCurlResult = 0;
 
 	/** @var int : cURL Error Number */
-	private $_iCurlErrNo = 0;
+	private int $_iCurlErrNo = 0;
 
 	/** @var string : cURL Error Message */
-	private $_sCurlError = '';
+	private string $_sCurlError = '';
 
 	/** @var array : cURL Info */
-	private $_aCurlInfo = [];
+	private array $_aCurlInfo = [];
 
 	/**
 	 * Online constructor.
 	 *
 	 * @param resource $rCUrlSession
+	 * @return void
 	 */
-	private function __construct($rCUrlSession) {
-
+	private function __construct($rCUrlSession)
+	{
 		try {
 			# ERROR
 			$this->_iCurlErrNo = curl_errno($rCUrlSession);
@@ -336,16 +349,17 @@ class Online
 			);
 
 		}
-
 	}
 
 	/**
 	 * URL
 	 *
 	 * @return string
+	 * @throws Exception
 	 */
-	public function url() {
-		return isset($this->_aCurlInfo['url']) ? self::_formatUrl($this->_aCurlInfo['url']) : '';
+	public function url(): string
+	{
+		return isset($this->_aCurlInfo['url']) ? self::cleanUrl($this->_aCurlInfo['url']) : '';
 	}
 
 	/**
@@ -353,8 +367,11 @@ class Online
 	 *
 	 * @return bool
 	 */
-	public function isOk() {
-		if(empty($this->_aCurlInfo['http_code'])) { return false; }
+	public function isOk(): bool
+	{
+		if(empty($this->_aCurlInfo['http_code'])) {
+			return false;
+		}
 		return $this->_aCurlInfo['http_code'] >= 200 && $this->_aCurlInfo['http_code'] < 300;
 	}
 
@@ -363,8 +380,9 @@ class Online
 	 *
 	 * @return int
 	 */
-	public function http_code() {
-		return empty($this->_aCurlInfo['http_code']) ? 0 : $this->_aCurlInfo['http_code'];
+	public function http_code(): int
+	{
+		return intval($this->_aCurlInfo['http_code'] ?? 0);
 	}
 
 	/**
@@ -372,8 +390,11 @@ class Online
 	 *
 	 * @return bool
 	 */
-	public function isRedirect() {
-		if(empty($this->_aCurlInfo['http_code'])) { return false; }
+	public function isRedirect(): bool
+	{
+		if(empty($this->_aCurlInfo['http_code'])) {
+			return false;
+		}
 		return !empty($this->_aCurlInfo['redirect_count']) || $this->_aCurlInfo['http_code'] === 301;
 	}
 
@@ -382,7 +403,8 @@ class Online
 	 *
 	 * @return string
 	 */
-	public function redirectUrl() {
+	public function redirectUrl(): string
+	{
 		return $this->_aCurlInfo['redirect_url'] ?? '';
 	}
 
@@ -391,7 +413,8 @@ class Online
 	 *
 	 * @return string
 	 */
-	public function ip() {
+	public function ip(): string
+	{
 		return $this->_aCurlInfo['primary_ip'] ?? '';
 	}
 
@@ -400,7 +423,8 @@ class Online
 	 *
 	 * @return int
 	 */
-	public function time() {
+	public function time(): int
+	{
 		return isset($this->_aCurlInfo['total_time']) ? floatval($this->_aCurlInfo['total_time']) : 0;
 	}
 
@@ -409,7 +433,8 @@ class Online
 	 *
 	 * @return string
 	 */
-	public function getMessage() {
+	public function getMessage(): string
+	{
 		return $this->_sCurlMessage;
 	}
 
@@ -418,7 +443,8 @@ class Online
 	 *
 	 * @return int
 	 */
-	public function getErrNo() {
+	public function getErrNo(): int
+	{
 		return $this->_iCurlErrNo;
 	}
 
@@ -427,7 +453,8 @@ class Online
 	 *
 	 * @return string
 	 */
-	public function getErrorMessage() {
+	public function getErrorMessage(): string
+	{
 		return $this->_sCurlError;
 	}
 
@@ -436,8 +463,8 @@ class Online
 	 *
 	 * @return string
 	 */
-	public function getContent() {
+	public function getContent(): string
+	{
 		return $this->_sCurlContent;
 	}
-
 }
